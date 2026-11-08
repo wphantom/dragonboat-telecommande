@@ -45,6 +45,17 @@
   .grid div { font-size: 13px; color: var(--muted); }
   .grid b { display: block; font-size: 17px; color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
   .good { color: var(--ok) !important; } .warn { color: var(--warn) !important; } .bad { color: var(--stop) !important; }
+  .seats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0; }
+  .seat { border-radius: 12px; padding: 8px 10px; border: 2px solid var(--line); background: var(--panel); text-align: left; }
+  .seat .num { font-size: 20px; font-weight: 800; }
+  .seat .why { font-size: 13px; font-weight: 600; }
+  .seat .info { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .seat .act { height: 6px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; }
+  .seat .act div { height: 100%; background: var(--mark); width: 0; }
+  .seat.green { border-color: var(--ok); } .seat.green .why { color: var(--ok); }
+  .seat.orange { border-color: var(--warn); } .seat.orange .why { color: var(--warn); }
+  .seat.red { border-color: var(--stop); } .seat.red .why { color: var(--stop); }
+  .seat.grey { opacity: .45; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
   .chips button { background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; font-size: 16px; }
   .chips button.sel { border-color: var(--mark); background: var(--mark); color: #fff; }
@@ -62,7 +73,7 @@
 <body>
 <main>
   <header>
-    <h1>Dragon Boat <small style="font-size:12px;color:var(--muted)">v5</small></h1>
+    <h1>Dragon Boat <small style="font-size:12px;color:var(--muted)">v6</small></h1>
     <span id="link" class="pill">déconnecté</span>
   </header>
 
@@ -93,6 +104,11 @@
       <button id="stop" class="big">STOP</button>
     </div>
 
+    <div class="card">
+      <div class="rec"><b>Pagaies</b><span id="seatsum" class="pill">–</span></div>
+      <div class="seats" id="seats"></div>
+    </div>
+
     <button id="mark" class="big">MARQUEUR</button>
     <div class="chips" id="chips"></div>
     <div class="row">
@@ -106,6 +122,10 @@
         <button id="export" class="small">Exporter (CSV)</button>
         <button id="clear" class="small">Effacer</button>
       </div>
+    </details>
+    <details>
+      <summary>Nombre de pagaies</summary>
+      <input id="nseats" type="number" min="1" max="49" inputmode="numeric">
     </details>
     <details>
       <summary>Étiquettes rapides</summary>
@@ -144,6 +164,8 @@ let device = null, control = null, etat = {}, lastEtat = 0, wantConnected = fals
 let journal = store.get("journal", []);
 let presets = store.get("presets", ["Échauffement", "Départ", "200 m", "500 m", "Sprint", "Récup", "Fin"]);
 let chosen = "", pendingLabels = [];
+let nSeats = store.get("nseats", 10);
+const paddles = {};  // numéro -> dernière ligne PAG reçue (+ heure de réception)
 
 // Pas de getAvailability() : dans Bluefy, l'appel plantait le script au chargement
 if (!navigator.bluetooth) { $("nobt").style.display = "block"; $("connect").disabled = true; }
@@ -205,6 +227,12 @@ function onText(line) {
     render();
     return;
   }
+  if (line.startsWith("PAG ")) {
+    const p = Object.fromEntries(line.slice(4).split(" ").map(kv => kv.split("=")));
+    p.rx = Date.now();
+    paddles[+p.n] = p;
+    return;
+  }
   if (line.startsWith("OK START")) { addLog("START", "code " + line.split(" ")[2]); toast("Enregistrement démarré", "good"); }
   else if (line.startsWith("OK STOP")) { addLog("STOP", ""); toast("Enregistrement arrêté", "good"); }
   else if (line.startsWith("OK MARK")) {
@@ -235,6 +263,54 @@ function render() {
   $("stop").disabled = !rec;
   $("mark").disabled = !rec;
 }
+
+// ---------- Grille des pagaies ----------
+// Rouge : perdue, carte SD absente ou en erreur, n'enregistre pas alors que le bateau enregistre.
+// Orange : réponse en retard, batterie faible, peu de balises reçues, paquets SD perdus,
+// enregistre alors que le bateau est à l'arrêt. Vert : tout va bien. Gris : jamais entendue.
+function seatState(p, rec) {
+  if (!p) return rec ? ["red", "absente"] : ["grey", "non vue"];
+  const age = +p.age + (Date.now() - p.rx) / 1000;
+  if (age > 10) return ["red", `perdue (${Math.round(age)} s)`];
+  if (p.sd === "0" || p.sd === "3") return ["red", p.sd === "0" ? "carte SD absente" : "erreur SD"];
+  if (rec && (p.rec !== "1" || p.code !== "1")) return ["red", "n'enregistre pas"];
+  if (!rec && p.rec === "1") return ["orange", "enregistre seule"];
+  if (age > 3) return ["orange", `en retard (${Math.round(age)} s)`];
+  if (+p.vbat < 3600) return ["orange", "batterie faible"];
+  if (+p.bal < 20) return ["orange", "balises faibles"];
+  if (+p.perdus > 0) return ["orange", `${p.perdus} paquets perdus`];
+  return ["green", rec ? "enregistre" : "prête"];
+}
+
+function renderSeats() {
+  const rec = etat.rec === "1";
+  const nums = [...new Set([...Array(nSeats).keys()].map(i => i + 1).concat(Object.keys(paddles).map(Number)))].sort((a, b) => a - b);
+  let ok = 0, seen = 0;
+  $("seats").replaceChildren(...nums.map(n => {
+    const p = paddles[n];
+    const [cls, why] = seatState(p, rec);
+    if (p) seen++;
+    if (cls === "green") ok++;
+    const d = document.createElement("div");
+    d.className = "seat " + cls;
+    const info = p ? `${(+p.vbat / 1000).toFixed(2)} V · bal ${p.bal} %` + (rec && p.ko ? ` · ${p.ko} Ko` : "") : "";
+    d.innerHTML = `<div class="num">S${String(n).padStart(2, "0")}</div><div class="why"></div><div class="info"></div><div class="act"><div></div></div>`;
+    d.querySelector(".why").textContent = why;
+    d.querySelector(".info").textContent = info;
+    d.querySelector(".act div").style.width = p ? Math.min(100, +p.gyr / 2) + "%" : "0";
+    return d;
+  }));
+  $("seatsum").textContent = `${ok} / ${nums.length} OK`;
+  $("seatsum").className = "pill " + (ok === nums.length ? "on" : seen ? "" : "bad");
+}
+setInterval(renderSeats, 1000);
+$("nseats").value = nSeats;
+$("nseats").onchange = () => {
+  nSeats = Math.max(1, Math.min(49, +$("nseats").value || 10));
+  store.set("nseats", nSeats);
+  renderSeats();
+};
+renderSeats();
 
 function set(id, text, cls) { $(id).textContent = text; $(id).className = cls || ""; }
 
