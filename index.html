@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f1720">
+<title>Dragon Boat</title>
+<style>
+  /* Télécommande du boîtier maître (Web Bluetooth, navigateur Bluefy sur iPhone / iPad).
+     Protocole : voir maitre/maitre.ino (caractéristiques Control et Texte). */
+  :root {
+    --bg: #0f1720; --panel: #18232f; --line: #2a3a4a; --text: #eef3f7; --muted: #8fa3b5;
+    --go: #1f9d55; --stop: #d64545; --mark: #2f6fdf; --warn: #e0a526; --ok: #35c27a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f3f5f7; --panel: #ffffff; --line: #d5dde4; --text: #101820; --muted: #5a6b7a; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: max(12px, env(safe-area-inset-top)) 16px 32px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  .pill { font-size: 14px; padding: 4px 10px; border-radius: 99px; background: var(--panel);
+    border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.on { color: var(--ok); border-color: var(--ok); }
+  .pill.bad { color: var(--stop); border-color: var(--stop); }
+  button { font: inherit; color: inherit; border: 0; border-radius: 14px; cursor: pointer; }
+  button:disabled { opacity: .35; }
+  .big { width: 100%; padding: 22px; font-size: 24px; font-weight: 700; color: #fff; }
+  #connect { background: var(--mark); }
+  #start { background: var(--go); }
+  #stop { background: var(--stop); }
+  #mark { background: var(--mark); font-size: 28px; padding: 30px; }
+  .row { display: flex; gap: 10px; margin: 10px 0; }
+  .row > * { flex: 1; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 10px 0; }
+  .rec { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .rec .state { font-size: 22px; font-weight: 700; }
+  .rec .state.on::before { content: ""; display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--stop); margin-right: 8px; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+  .rec .clock { font-size: 34px; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .grid div { font-size: 13px; color: var(--muted); }
+  .grid b { display: block; font-size: 17px; color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+  .good { color: var(--ok) !important; } .warn { color: var(--warn) !important; } .bad { color: var(--stop) !important; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .chips button { background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; font-size: 16px; }
+  .chips button.sel { border-color: var(--mark); background: var(--mark); color: #fff; }
+  input { font: inherit; width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); }
+  #toast { min-height: 24px; text-align: center; font-weight: 600; margin: 8px 0; }
+  details summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 5px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .small { font-size: 14px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); }
+  #nobt { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Dragon Boat</h1>
+    <span id="link" class="pill">déconnecté</span>
+  </header>
+
+  <div id="nobt" class="card bad">Ce navigateur ne gère pas le Bluetooth. Sur iPhone, ouvrir cette page dans l'app <b>Bluefy</b>.</div>
+
+  <button id="connect" class="big">Connecter le boîtier</button>
+
+  <div id="ui" hidden>
+    <div class="card">
+      <div class="rec">
+        <span id="state" class="state">En attente</span>
+        <span id="clock" class="clock">0:00</span>
+      </div>
+      <div class="grid">
+        <div>Code<b id="code">–</b></div>
+        <div>Marqueurs<b id="marq">0</b></div>
+        <div>Carte SD<b id="sd">–</b></div>
+        <div>GNSS<b id="gnss">–</b></div>
+        <div>Batterie<b id="vbat">–</b></div>
+        <div>Fichier<b id="fic">–</b></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button id="start" class="big">START</button>
+      <button id="stop" class="big">STOP</button>
+    </div>
+
+    <div id="toast"></div>
+
+    <button id="mark" class="big">MARQUEUR</button>
+    <div class="chips" id="chips"></div>
+    <div class="row">
+      <input id="label" maxlength="24" placeholder="Étiquette du prochain marqueur (facultatif)" autocomplete="off">
+    </div>
+
+    <details>
+      <summary>Journal de la séance (sur ce téléphone)</summary>
+      <table id="log"></table>
+      <div class="row">
+        <button id="export" class="small">Exporter (CSV)</button>
+        <button id="clear" class="small">Effacer</button>
+      </div>
+    </details>
+    <details>
+      <summary>Étiquettes rapides</summary>
+      <p class="small" style="border:0;padding:0;background:none">Une par ligne.</p>
+      <textarea id="presets" rows="6" style="width:100%;font:inherit;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text)"></textarea>
+    </details>
+  </div>
+</main>
+
+<script>
+const UUID = n => `a1b2000${n}-7c3d-4e5f-9a0b-1c2d3e4f5a6b`;
+const SVC = UUID(1), CONTROL = UUID(3), TEXT = UUID(7);
+const $ = id => document.getElementById(id);
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+let device = null, control = null, etat = {}, lastEtat = 0, wantConnected = false, wakeLock = null;
+let journal = store.get("journal", []);
+let presets = store.get("presets", ["Échauffement", "Départ", "200 m", "500 m", "Sprint", "Récup", "Fin"]);
+let chosen = "", pendingLabels = [];
+
+if (!navigator.bluetooth) { $("nobt").style.display = "block"; $("connect").disabled = true; }
+
+// ---------- Bluetooth ----------
+$("connect").onclick = async () => {
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "IMU-BATEAU" }], optionalServices: [SVC] });
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    wantConnected = true;
+    await connect();
+  } catch (e) { toast(e.message, "bad"); }
+};
+
+async function connect() {
+  setLink("connexion…");
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(SVC);
+  control = await svc.getCharacteristic(CONTROL);
+  const text = await svc.getCharacteristic(TEXT);
+  text.addEventListener("characteristicvaluechanged", e => onText(new TextDecoder().decode(e.target.value)));
+  await text.startNotifications();
+  setLink(device.name, "on");
+  $("connect").hidden = true;
+  $("ui").hidden = false;
+  keepAwake();
+  send("STATUS");
+}
+
+async function onDisconnected() {
+  control = null;
+  setLink("perdu, reconnexion…", "bad");
+  for (let i = 0; wantConnected && i < 30; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    try { await connect(); return; } catch {}
+  }
+  setLink("déconnecté", "bad");
+  $("connect").hidden = false;
+}
+
+async function send(cmd) {
+  if (!control) { toast("Pas de connexion", "bad"); return false; }
+  const data = new TextEncoder().encode(cmd);
+  try {
+    if (control.writeValueWithResponse) await control.writeValueWithResponse(data);
+    else await control.writeValue(data);
+    return true;
+  } catch (e) { toast("Envoi impossible : " + e.message, "bad"); return false; }
+}
+
+// ---------- Messages du boîtier ----------
+function onText(line) {
+  if (line.startsWith("ETAT ")) {
+    etat = Object.fromEntries(line.slice(5).split(" ").map(kv => kv.split("=")));
+    lastEtat = Date.now();
+    render();
+    return;
+  }
+  if (line.startsWith("OK START")) { addLog("START", "code " + line.split(" ")[2]); toast("Enregistrement démarré", "good"); }
+  else if (line.startsWith("OK STOP")) { addLog("STOP", ""); toast("Enregistrement arrêté", "good"); }
+  else if (line.startsWith("OK MARK")) {
+    const n = line.split(" ")[2];
+    addLog("Marqueur " + n, pendingLabels.shift() || "");
+    toast("Marqueur " + n, "good");
+  }
+  else if (line.startsWith("ERR MARK")) { pendingLabels.shift(); toast(line.slice(4), "bad"); }
+  else if (line.startsWith("ERR")) toast(line.slice(4), "bad");
+}
+
+function render() {
+  const rec = etat.rec === "1";
+  $("state").textContent = rec ? "Enregistrement" : "En attente";
+  $("state").className = "state" + (rec ? " on" : "");
+  const t = +etat.t || 0;
+  $("clock").textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+  $("code").textContent = etat.code || "–";
+  $("marq").textContent = etat.marq || "0";
+  $("fic").textContent = etat.fic || "–";
+  const sd = { 0: ["absente", "bad"], 1: ["prête", "good"], 2: ["enregistre", "good"], 3: ["ERREUR", "bad"] }[etat.sd] || ["–", ""];
+  set("sd", sd[0] + (+etat.perdus ? ` (${etat.perdus} perdus)` : ""), +etat.perdus ? "warn" : sd[1]);
+  const g = +etat.gnss;
+  set("gnss", g === 2 ? `fix ${etat.sat} sat` : g === 1 ? `sans fix` : "muet", g === 2 ? "good" : g === 1 ? "warn" : "bad");
+  const v = +etat.vbat;
+  set("vbat", v ? (v / 1000).toFixed(2) + " V" : "–", v < 3500 ? "bad" : v < 3700 ? "warn" : "good");
+  $("start").disabled = rec;
+  $("stop").disabled = !rec;
+  $("mark").disabled = !rec;
+}
+
+function set(id, text, cls) { $(id).textContent = text; $(id).className = cls || ""; }
+
+setInterval(() => {  // état périmé : connexion silencieuse
+  if (control && lastEtat && Date.now() - lastEtat > 3000) setLink("pas de nouvelles", "bad");
+  else if (control) setLink(device.name, "on");
+}, 1000);
+
+// ---------- Boutons ----------
+$("start").onclick = () => send("START");
+$("stop").onclick = () => { if (confirm("Arrêter l'enregistrement ?")) send("STOP"); };
+$("mark").onclick = async () => {
+  const label = utf8Cut(($("label").value.trim() || chosen), 24);
+  pendingLabels.push(label);
+  if (await send(label ? "MARK " + label : "MARK")) {
+    if (navigator.vibrate) navigator.vibrate(60);
+    $("label").value = "";
+    chosen = "";
+    renderChips();
+  } else pendingLabels.pop();
+};
+
+function renderChips() {
+  $("chips").replaceChildren(...presets.map(p => {
+    const b = document.createElement("button");
+    b.textContent = p;
+    b.className = p === chosen ? "sel" : "";
+    b.onclick = () => { chosen = chosen === p ? "" : p; renderChips(); };
+    return b;
+  }));
+}
+$("presets").value = presets.join("\n");
+$("presets").onchange = () => {
+  presets = $("presets").value.split("\n").map(s => s.trim()).filter(Boolean);
+  store.set("presets", presets);
+  renderChips();
+};
+renderChips();
+
+// L'étiquette doit tenir dans 24 octets UTF-8 (champ du paquet MARK)
+function utf8Cut(s, max) {
+  const enc = new TextEncoder();
+  while (enc.encode(s).length > max) s = s.slice(0, -1);
+  return s;
+}
+
+// ---------- Journal local ----------
+function addLog(what, detail) {
+  journal.push({ heure: new Date().toISOString(), code: etat.code || "", quoi: what, detail, t: +etat.t || 0 });
+  store.set("journal", journal);
+  renderLog();
+}
+function renderLog() {
+  $("log").replaceChildren(...journal.slice(-50).reverse().map(e => {
+    const tr = document.createElement("tr");
+    const d = new Date(e.heure);
+    tr.innerHTML = `<td>${d.toLocaleTimeString("fr-FR")}</td><td></td>`;
+    tr.lastChild.textContent = `${e.quoi} ${e.detail || ""} (${e.code})`;
+    return tr;
+  }));
+}
+renderLog();
+$("export").onclick = async () => {
+  const csv = "heure;code;quoi;detail;t_s\n" +
+    journal.map(e => [e.heure, e.code, e.quoi, (e.detail || "").replace(/;/g, ","), e.t].join(";")).join("\n");
+  const file = new File([csv], `journal_dragonboat_${new Date().toISOString().slice(0, 10)}.csv`, { type: "text/csv" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch {}
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  a.click();
+};
+$("clear").onclick = () => { if (confirm("Effacer le journal de ce téléphone ?")) { journal = []; store.set("journal", journal); renderLog(); } };
+
+// ---------- Divers ----------
+function setLink(text, cls) { $("link").textContent = text; $("link").className = "pill " + (cls || ""); }
+let toastTimer;
+function toast(text, cls) {
+  $("toast").textContent = text;
+  $("toast").className = cls || "";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").textContent = "", 3000);
+}
+async function keepAwake() {  // écran allumé pendant la séance, si le navigateur le permet
+  try { if ("wakeLock" in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wakeLock = null; keepAwake(); } });
+</script>
+</body>
+</html>
