@@ -62,7 +62,7 @@
 <body>
 <main>
   <header>
-    <h1>Dragon Boat <small style="font-size:12px;color:var(--muted)">v3</small></h1>
+    <h1>Dragon Boat <small style="font-size:12px;color:var(--muted)">v4</small></h1>
     <span id="link" class="pill">déconnecté</span>
   </header>
 
@@ -141,9 +141,8 @@ let journal = store.get("journal", []);
 let presets = store.get("presets", ["Échauffement", "Départ", "200 m", "500 m", "Sprint", "Récup", "Fin"]);
 let chosen = "", pendingLabels = [];
 
+// Pas de getAvailability() : dans Bluefy, l'appel plantait le script au chargement
 if (!navigator.bluetooth) { $("nobt").style.display = "block"; $("connect").disabled = true; }
-else if (navigator.bluetooth.getAvailability)
-  navigator.bluetooth.getAvailability().then(ok => { if (!ok) toast("Bluetooth indisponible : l'activer et autoriser Bluefy (Réglages > Bluefy)", "bad"); });
 
 // ---------- Bluetooth ----------
 $("connect").onclick = async () => {
@@ -247,7 +246,7 @@ $("mark").onclick = async () => {
   const label = utf8Cut(($("label").value.trim() || chosen), 24);
   pendingLabels.push(label);
   if (await send(label ? "MARK " + label : "MARK")) {
-    if (navigator.vibrate) navigator.vibrate(60);
+    try { if (navigator.vibrate) navigator.vibrate(60); } catch {}
     $("label").value = "";
     chosen = "";
     renderChips();
@@ -298,9 +297,9 @@ $("export").onclick = async () => {
   const csv = "heure;code;quoi;detail;t_s\n" +
     journal.map(e => [e.heure, e.code, e.quoi, (e.detail || "").replace(/;/g, ","), e.t].join(";")).join("\n");
   const file = new File([csv], `journal_dragonboat_${new Date().toISOString().slice(0, 10)}.csv`, { type: "text/csv" });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file] }); return; } catch {}
-  }
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
+  } catch {}
   const a = document.createElement("a");
   a.href = URL.createObjectURL(file);
   a.download = file.name;
