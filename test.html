@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test Bluetooth</title>
+<style>
+  :root { --bg: #ffffff; --text: #101820; --line: #d5dde4; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1720; --text: #eef3f7; --line: #2a3a4a; } }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font: 16px/1.4 -apple-system, sans-serif; }
+  button { display: block; width: 100%; margin: 8px 0; padding: 16px; font: inherit; font-weight: 600;
+    border: 0; border-radius: 12px; background: #2f6fdf; color: #fff; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 12px; padding: 10px; font-size: 13px; }
+</style>
+</head>
+<body>
+<h2>Test Bluetooth (Bluefy)</h2>
+<p>Appuyer sur chaque bouton l'un après l'autre (annuler la liste si elle s'ouvre), puis envoyer une capture du cadre.</p>
+<button data-v="1">1. Tous les appareils</button>
+<button data-v="2">2. Filtre service</button>
+<button data-v="3">3. Filtre début de nom</button>
+<button data-v="4">4. Filtre nom exact</button>
+<button data-v="5">5. Les deux filtres (page actuelle)</button>
+<pre id="out"></pre>
+<script>
+const SVC = "a1b20001-7c3d-4e5f-9a0b-1c2d3e4f5a6b";
+const out = document.getElementById("out");
+const log = m => { out.textContent += m + "\n"; };
+window.addEventListener("error", e => log(`erreur globale : ${e.message} ${e.filename || ""}:${e.lineno}`));
+window.addEventListener("unhandledrejection", e => log(`rejet : ${e.reason && (e.reason.message || e.reason)}`));
+log(`navigator.bluetooth : ${typeof navigator.bluetooth}`);
+log(`requestDevice : ${navigator.bluetooth && typeof navigator.bluetooth.requestDevice}`);
+log(navigator.userAgent);
+const options = {
+  1: { acceptAllDevices: true, optionalServices: [SVC] },
+  2: { filters: [{ services: [SVC] }] },
+  3: { filters: [{ namePrefix: "IMU-BATEAU" }], optionalServices: [SVC] },
+  4: { filters: [{ name: "IMU-BATEAU-E5E4" }], optionalServices: [SVC] },
+  5: { filters: [{ namePrefix: "IMU-BATEAU" }, { services: [SVC] }], optionalServices: [SVC] },
+};
+document.querySelectorAll("button").forEach(b => b.onclick = async () => {
+  const v = b.dataset.v;
+  log(`--- essai ${v} : appel`);
+  try {
+    const p = navigator.bluetooth.requestDevice(options[v]);
+    log(`essai ${v} : promesse reçue (${typeof p})`);
+    const d = await p;
+    log(`essai ${v} : OK, appareil ${d.name}`);
+    const server = await d.gatt.connect();
+    const svc = await server.getPrimaryService(SVC);
+    log(`essai ${v} : connecté, service trouvé`);
+    d.gatt.disconnect();
+  } catch (e) {
+    log(`essai ${v} : ${e && e.name} : ${e && e.message || e}`);
+  }
+});
+</script>
+</body>
+</html>
