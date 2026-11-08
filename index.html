@@ -45,14 +45,15 @@
   .grid div { font-size: 13px; color: var(--muted); }
   .grid b { display: block; font-size: 17px; color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
   .good { color: var(--ok) !important; } .warn { color: var(--warn) !important; } .bad { color: var(--stop) !important; }
-  .seats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0; }
-  .seat { border-radius: 12px; padding: 8px 10px; border: 2px solid var(--line); background: var(--panel); text-align: left; }
-  .seat .num { font-size: 20px; font-weight: 800; }
-  .seat .why { font-size: 13px; font-weight: 600; }
-  .seat .info { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .seat .act { height: 6px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; }
-  .seat .act div { height: 100%; background: var(--mark); width: 0; }
-  .seat.green { border-color: var(--ok); } .seat.green .why { color: var(--ok); }
+  .seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin: 10px 0; }
+  .seat { border-radius: 10px; padding: 5px 8px; border: 2px solid var(--line); background: var(--panel); }
+  .seat .num { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+  .seat .dot { width: 12px; height: 12px; flex: none; }
+  .seat .dot.ready { background: var(--ok); border-radius: 2px; }
+  .seat .dot.rec { background: var(--stop); border-radius: 50%; }
+  .seat .info { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .seat .why { font-size: 12px; font-weight: 600; }
+  .seat.green { border-color: var(--line); }
   .seat.orange { border-color: var(--warn); } .seat.orange .why { color: var(--warn); }
   .seat.red { border-color: var(--stop); } .seat.red .why { color: var(--stop); }
   .seat.grey { opacity: .45; }
@@ -73,7 +74,7 @@
 <body>
 <main>
   <header>
-    <h1>Dragon Boat <small style="font-size:12px;color:var(--muted)">v6</small></h1>
+    <h1>Dragon Boat <small style="font-size:12px;color:var(--muted)">v7</small></h1>
     <span id="link" class="pill">déconnecté</span>
   </header>
 
@@ -293,11 +294,11 @@ function renderSeats() {
     if (cls === "green") ok++;
     const d = document.createElement("div");
     d.className = "seat " + cls;
-    const info = p ? `${(+p.vbat / 1000).toFixed(2)} V · bal ${p.bal} %` + (rec && p.ko ? ` · ${p.ko} Ko` : "") : "";
-    d.innerHTML = `<div class="num">S${String(n).padStart(2, "0")}</div><div class="why"></div><div class="info"></div><div class="act"><div></div></div>`;
-    d.querySelector(".why").textContent = why;
-    d.querySelector(".info").textContent = info;
-    d.querySelector(".act div").style.width = p ? Math.min(100, +p.gyr / 2) + "%" : "0";
+    // carré vert : prête ; rond rouge : enregistre ; motif écrit seulement en cas de problème
+    const dot = cls === "green" ? (p.rec === "1" ? "rec" : "ready") : "";
+    d.innerHTML = `<div class="num"><span class="dot ${dot}"></span>S${String(n).padStart(2, "0")}</div><div class="info"></div><div class="why"></div>`;
+    d.querySelector(".info").textContent = p ? `${(+p.vbat / 1000).toFixed(2)} V · ${p.bal} %` : "";
+    d.querySelector(".why").textContent = cls === "green" ? "" : why;
     return d;
   }));
   $("seatsum").textContent = `${ok} / ${nums.length} OK`;
