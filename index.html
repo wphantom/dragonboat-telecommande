@@ -62,7 +62,7 @@
 <body>
 <main>
   <header>
-    <h1>Dragon Boat</h1>
+    <h1>Dragon Boat <small style="font-size:12px;color:var(--muted)">v3</small></h1>
     <span id="link" class="pill">déconnecté</span>
   </header>
 
@@ -70,6 +70,7 @@
 
   <button id="connect" class="big">Connecter le boîtier</button>
   <div id="toast"></div>
+  <div id="diag" style="font-size:12px;color:var(--muted);overflow-wrap:anywhere"></div>
 
   <div id="ui" hidden>
     <div class="card">
@@ -115,6 +116,17 @@
 </main>
 
 <script>
+// Toute erreur JavaScript s'affiche à l'écran (diagnostic sur le téléphone)
+function showError(msg) {
+  const d = document.getElementById("diag");
+  if (d) d.innerHTML += `<div style="color:#d64545">⚠ ${String(msg).replace(/</g, "&lt;")}</div>`;
+}
+window.addEventListener("error", e => showError(`${e.message} (ligne ${e.lineno})`));
+window.addEventListener("unhandledrejection", e => showError(e.reason && (e.reason.message || e.reason)));
+</script>
+<script>
+document.getElementById("diag").textContent =
+  `Bluetooth web : ${navigator.bluetooth ? "présent" : "ABSENT"} · ${navigator.userAgent}`;
 const UUID = n => `a1b2000${n}-7c3d-4e5f-9a0b-1c2d3e4f5a6b`;
 const SVC = UUID(1), CONTROL = UUID(3), TEXT = UUID(7);
 const $ = id => document.getElementById(id);
