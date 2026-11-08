@@ -69,6 +69,7 @@
   <div id="nobt" class="card bad">Ce navigateur ne gère pas le Bluetooth. Sur iPhone, ouvrir cette page dans l'app <b>Bluefy</b>.</div>
 
   <button id="connect" class="big">Connecter le boîtier</button>
+  <div id="toast"></div>
 
   <div id="ui" hidden>
     <div class="card">
@@ -90,8 +91,6 @@
       <button id="start" class="big">START</button>
       <button id="stop" class="big">STOP</button>
     </div>
-
-    <div id="toast"></div>
 
     <button id="mark" class="big">MARQUEUR</button>
     <div class="chips" id="chips"></div>
@@ -131,16 +130,20 @@ let presets = store.get("presets", ["Échauffement", "Départ", "200 m", "500 m"
 let chosen = "", pendingLabels = [];
 
 if (!navigator.bluetooth) { $("nobt").style.display = "block"; $("connect").disabled = true; }
+else if (navigator.bluetooth.getAvailability)
+  navigator.bluetooth.getAvailability().then(ok => { if (!ok) toast("Bluetooth indisponible : l'activer et autoriser Bluefy (Réglages > Bluefy)", "bad"); });
 
 // ---------- Bluetooth ----------
 $("connect").onclick = async () => {
+  toast("Recherche du boîtier…");
   try {
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: "IMU-BATEAU" }], optionalServices: [SVC] });
+      filters: [{ namePrefix: "IMU-BATEAU" }, { services: [SVC] }], optionalServices: [SVC] });
     device.addEventListener("gattserverdisconnected", onDisconnected);
     wantConnected = true;
     await connect();
-  } catch (e) { toast(e.message, "bad"); }
+    toast("");
+  } catch (e) { toast(`${e.name || "Erreur"} : ${e.message || e}`, "bad", 0); }
 };
 
 async function connect() {
@@ -296,11 +299,11 @@ $("clear").onclick = () => { if (confirm("Effacer le journal de ce téléphone ?
 // ---------- Divers ----------
 function setLink(text, cls) { $("link").textContent = text; $("link").className = "pill " + (cls || ""); }
 let toastTimer;
-function toast(text, cls) {
+function toast(text, cls, ms = 3000) {  // ms = 0 : reste affiché
   $("toast").textContent = text;
   $("toast").className = cls || "";
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => $("toast").textContent = "", 3000);
+  if (ms) toastTimer = setTimeout(() => $("toast").textContent = "", ms);
 }
 async function keepAwake() {  // écran allumé pendant la séance, si le navigateur le permet
   try { if ("wakeLock" in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch {}
